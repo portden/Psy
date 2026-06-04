@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Global Safety Net
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Global Helpers
+    // ===============================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() <= 256 && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Entity Validations
+    // ===============================================================
+
+    // Validate User Entity
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.createdAt is timestamp &&
+             (data.get('displayName', '') is string) &&
+             (data.get('photoURL', '') is string);
+    }
+
+    // Validate Course Application Entity
+    function isValidApplication(data) {
+      return data.keys().hasAll(['name', 'email', 'courseId', 'courseTitle', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             isValidEmail(data.email) &&
+             data.courseId is string && data.courseId.size() <= 64 &&
+             data.courseTitle is string && data.courseTitle.size() <= 200 &&
+             data.createdAt == request.time;
+    }
+
+    // Validate Deletion Request Entity
+    function isValidDeletionRequest(data) {
+      return data.keys().hasAll(['email', 'status', 'createdAt']) &&
+             isValidEmail(data.email) &&
+             data.status == 'pending' &&
+             data.createdAt == request.time &&
+             (data.get('reason', '') is string && data.get('reason', '').size() <= 1000);
+    }
+
+    // ===============================================================
+    // Collection Matches
+    // ===============================================================
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        // Action: Self update / Login
+        incoming().diff(existing()).affectedKeys().hasOnly(['lastLogin', 'displayName', 'photoURL'])
+      );
+    }
+
+    // Applications Collection
+    match /applications/{applicationId} {
+      allow create: if isValidApplication(incoming());
+      // No read access for students to all applications
+    }
+
+    // Deletion Requests Collection
+    match /deletion_requests/{requestId} {
+      allow create: if isValidDeletionRequest(incoming());
+      // No read access - processed by admin manually in Firebase Console
+    }
+  }
+}

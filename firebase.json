@@ -1,0 +1,20 @@
+{
+  "hosting": {
+    "site": "gen-lang-client-0229738126",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "psycheacademy-psychology-courses-850552229883",
+          "region": "us-west1"
+        }
+      }
+    ]
+  }
+}
