@@ -10,10 +10,7 @@
     "rewrites": [
       {
         "source": "**",
-        "run": {
-          "serviceId": "psycheacademy-psychology-courses-850552229883",
-          "region": "europe-west3"
-        }
+        "destination": "/index.html"
       }
     ]
   }
