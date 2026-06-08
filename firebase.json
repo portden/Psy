@@ -12,7 +12,7 @@
         "source": "**",
         "run": {
           "serviceId": "psycheacademy-psychology-courses-850552229883",
-          "region": "us-west1"
+          "region": "europe-west3"
         }
       }
     ]
