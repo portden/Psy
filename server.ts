@@ -1,7 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import nodemailer from "nodemailer";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
@@ -19,88 +18,50 @@ async function startServer() {
     console.log(`PsycheAcademy: Received application request for ${email}. Course: ${courseTitle}`);
 
     try {
-      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        const smtpHost = process.env.SMTP_HOST;
-        const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
-        const smtpSecure = process.env.SMTP_SECURE !== "false"; // default to true
-        const fromName = process.env.FROM_NAME || "PsycheAcademy";
-        const fromEmail = process.env.FROM_EMAIL || process.env.EMAIL_USER;
+      const serviceId = process.env.EMAILJS_SERVICE_ID || "portservice";
+      const templateId = process.env.EMAILJS_TEMPLATE_ID || "template_wl7km5e";
+      const publicKey = process.env.EMAILJS_PUBLIC_KEY || "nDTYKeAEEZY5bxkRB";
 
-        let transporter;
+      console.log(`PsycheAcademy: Preparing EmailJS request using Service ID '${serviceId}' and Template ID '${templateId}'`);
 
-        if (smtpHost) {
-          console.log(`PsycheAcademy: Configuring SMTP transporter with custom host: ${smtpHost}:${smtpPort} (Secure: ${smtpSecure}), Authenticating as ${process.env.EMAIL_USER}`);
-          transporter = nodemailer.createTransport({
-            host: smtpHost,
-            port: smtpPort,
-            secure: smtpSecure,
-            auth: {
-              user: process.env.EMAIL_USER,
-              pass: process.env.EMAIL_PASS,
-            },
-            // TLS configuration to ignore unauthorized certs if needed (common in some custom corporate SMTPs)
-            tls: {
-              rejectUnauthorized: false
-            }
-          });
-        } else {
-          console.log(`PsycheAcademy: Configuring standard Gmail SMTP service, Authenticating as ${process.env.EMAIL_USER}`);
-          transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-              user: process.env.EMAIL_USER,
-              pass: process.env.EMAIL_PASS,
-            },
-          });
+      const emailJsPayload = {
+        service_id: serviceId,
+        template_id: templateId,
+        user_id: publicKey,
+        template_params: {
+          name: name,
+          course_title: courseTitle,
+          email: email,
+          phone: phone || "Не указан"
         }
+      };
 
-        // Verify transport connection before attempting to send
-        console.log("PsycheAcademy: Verifying SMTP connection status...");
-        try {
-          await transporter.verify();
-          console.log("PsycheAcademy: SMTP server connection is ready");
-        } catch (verifyError: any) {
-          console.error("PsycheAcademy SMTP Verification Error:", verifyError.message);
-          return res.status(500).json({ 
-            error: "SMTP connection failed", 
-            details: verifyError.message,
-            tip: "Please check your SMTP host, port, and authentication credentials. If using Gmail, make sure you generated an App Password instead of using your standard password."
-          });
-        }
+      const emailResponse = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(emailJsPayload)
+      });
 
-        console.log(`PsycheAcademy: Sending confirmation email to user (${email})...`);
-        // User confirmation
-        await transporter.sendMail({
-          from: `"${fromName}" <${fromEmail}>`,
-          to: email,
-          subject: "Заявка принята — PsycheAcademy",
-          text: `Здравствуйте, ${name}!\n\nМы получили вашу заявку на курс "${courseTitle}". Наш менеджер свяжется с вами в течение 24 часов.\n\nС уважением,\nКоманда PsycheAcademy`,
-        });
-
-        console.log("PsycheAcademy: Sending notification email to admin (portden@gmail.com)...");
-        // Admin notification
-        await transporter.sendMail({
-          from: `"${fromName}" <${fromEmail}>`,
-          to: "portden@gmail.com",
-          subject: `Новая заявка: ${courseTitle}`,
-          text: `Новая заявка на курс "${courseTitle}"\n\nИмя: ${name}\nEmail: ${email}\nТелефон: ${phone || 'Не указан'}`,
-        });
-
-        console.log("PsycheAcademy: Emails sent successfully");
+      if (emailResponse.ok) {
+        console.log("PsycheAcademy: Email sent successfully via EmailJS!");
         res.json({ message: "Email sent" });
       } else {
-        console.warn("PsycheAcademy: EMAIL_USER or EMAIL_PASS environment variables are not set");
+        const errorText = await emailResponse.text();
+        console.error("PsycheAcademy: EmailJS API error response:", errorText);
         res.status(500).json({ 
-          error: "Email credentials not configured",
-          tip: "Please set EMAIL_USER and EMAIL_PASS environment variables in the AI Studio Secrets panel."
+          error: "EmailJS API request failed", 
+          details: errorText,
+          tip: "Please confirm that your Service ID, Template ID, and Public Key are absolutely correct and that your template variables match."
         });
       }
     } catch (error: any) {
-      console.error("PsycheAcademy Email Error during sending:", error.message);
+      console.error("PsycheAcademy Error calling EmailJS:", error.message);
       res.status(500).json({ 
-        error: "Email failed", 
+        error: "EmailJS delivery failed", 
         details: error.message,
-        tip: "Email generation failed during mail transfer. Ensure your SMTP account hasn't reached its limits and allows external integrations."
+        tip: "Network request to EmailJS API failed. Please ensure the server container has internet access and EmailJS is online."
       });
     }
   });
