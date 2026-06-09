@@ -51,14 +51,22 @@ service cloud.firestore {
              (data.get('photoURL', '') is string);
     }
 
-    // Validate Course Application Entity
+    // Validate Course or Plan Application Entity
     function isValidApplication(data) {
-      return data.keys().hasAll(['name', 'email', 'courseId', 'courseTitle', 'createdAt']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              isValidEmail(data.email) &&
-             data.courseId is string && data.courseId.size() <= 64 &&
-             data.courseTitle is string && data.courseTitle.size() <= 200 &&
-             data.createdAt == request.time;
+             data.createdAt == request.time &&
+             (
+               // Option A: Course Registration
+               (data.keys().hasAll(['courseId', 'courseTitle']) &&
+                data.courseId is string && data.courseId.size() <= 64 &&
+                data.courseTitle is string && data.courseTitle.size() <= 200)
+               ||
+               // Option B: Plan/Subscription
+               (data.keys().hasAll(['planName', 'type']) &&
+                data.planName is string && data.planName.size() <= 100 &&
+                data.type == "plan_subscription")
+             );
     }
 
     // Validate Deletion Request Entity

@@ -103,6 +103,7 @@ export default function Pricing() {
         createdAt: serverTimestamp(),
       });
 
+      let emailSuccess = false;
       const response = await fetch("/api/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,16 +113,50 @@ export default function Pricing() {
           phone,
           courseTitle: `Subscription: ${selectedPlan.name}`
         }),
+      }).catch(err => {
+        console.warn("Backend apply API failed, trying client-side delivery...", err);
+        return null;
       });
       
-      if (response.ok) {
+      if (response && response.ok) {
+        emailSuccess = true;
+      } else {
+        console.warn("Server-side EmailJS failed or was blocked. Falling back to browser-direct EmailJS...");
+        try {
+          const emailJsPayload = {
+            service_id: "portservice",
+            template_id: "template_wl7km5e",
+            user_id: "nDTYKeAEEZY5bxkRB",
+            template_params: {
+              name,
+              course_title: `Subscription: ${selectedPlan.name}`,
+              course: `Subscription: ${selectedPlan.name}`,
+              email,
+              phone: phone || "Не указан"
+            }
+          };
+          const fbResponse = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(emailJsPayload)
+          });
+          if (fbResponse.ok) {
+            emailSuccess = true;
+            console.log("Browser-direct EmailJS send successful as fallback!");
+          } else {
+            console.error("Browser-direct EmailJS also failed:", await fbResponse.text());
+          }
+        } catch (fbErr: any) {
+          console.error("Browser-direct EmailJS fallback exception:", fbErr);
+        }
+      }
+
+      if (emailSuccess) {
         showToast("Заявка успешно отправлена!");
         setSelectedPlan(null);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || errorData.details || response.statusText;
-        console.error("Backend Error response:", errorData);
-        showToast(`Ошибка отправки: ${errorMessage}`);
+        showToast("Заявка сохранена в базу данных, но возникла проблема с почтовым уведомлением.");
+        setSelectedPlan(null);
       }
     } catch (error: any) {
       console.error("Submission error:", error);
