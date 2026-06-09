@@ -138,6 +138,8 @@ export default function Home() {
       });
 
       let emailSuccess = false;
+      let diagnosticMessage = "";
+
       const response = await fetch("/api/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,12 +152,22 @@ export default function Home() {
         }),
       }).catch(err => {
         console.warn("Backend apply API failed, trying client-side delivery...", err);
+        diagnosticMessage = `Network error calling backend: ${err.message}`;
         return null;
       });
       
       if (response && response.ok) {
         emailSuccess = true;
       } else {
+        if (response) {
+          try {
+            const errJson = await response.json();
+            diagnosticMessage = errJson.tip || errJson.details || errJson.error || response.statusText;
+          } catch {
+            diagnosticMessage = `Backend returned status ${response.status} ${response.statusText}`;
+          }
+        }
+        
         console.warn("Server-side EmailJS failed or was blocked. Falling back to browser-direct EmailJS...");
         try {
           const emailJsPayload = {
@@ -179,10 +191,13 @@ export default function Home() {
             emailSuccess = true;
             console.log("Browser-direct EmailJS send successful as fallback!");
           } else {
-            console.error("Browser-direct EmailJS also failed:", await fbResponse.text());
+            const directErr = await fbResponse.text();
+            console.error("Browser-direct EmailJS also failed:", directErr);
+            diagnosticMessage += ` | Direct EmailJS: ${directErr}`;
           }
         } catch (fbErr: any) {
           console.error("Browser-direct EmailJS fallback exception:", fbErr);
+          diagnosticMessage += ` | Direct fallback exception: ${fbErr.message}`;
         }
       }
 
@@ -190,7 +205,7 @@ export default function Home() {
         showToast("Заявка успешно отправлена!");
         setSelectedCourse(null);
       } else {
-        showToast("Заявка сохранена в базу данных, но возникла проблема с почтовым уведомлением.");
+        showToast(`Заявка сохранена, но ошибка отправки почты: ${diagnosticMessage}`);
         setSelectedCourse(null);
       }
     } catch (error: any) {
