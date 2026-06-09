@@ -153,8 +153,10 @@ export default function Home() {
         showToast("Заявка успешно отправлена!");
         setSelectedCourse(null);
       } else {
-        showToast("Заявка сохранена, но возникла проблема с почтой.");
-        setSelectedCourse(null);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.details || response.statusText;
+        console.error("Backend Error response:", errorData);
+        showToast(`Ошибка отправки: ${errorMessage}`);
       }
     } catch (error: any) {
       console.error("Submission error:", error);

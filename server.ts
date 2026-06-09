@@ -21,20 +21,26 @@ async function startServer() {
       const serviceId = process.env.EMAILJS_SERVICE_ID || "portservice";
       const templateId = process.env.EMAILJS_TEMPLATE_ID || "template_wl7km5e";
       const publicKey = process.env.EMAILJS_PUBLIC_KEY || "nDTYKeAEEZY5bxkRB";
+      const privateKey = process.env.EMAILJS_PRIVATE_KEY;
 
-      console.log(`PsycheAcademy: Preparing EmailJS request using Service ID '${serviceId}' and Template ID '${templateId}'`);
+      console.log(`PsycheAcademy: Preparing EmailJS request using Service ID '${serviceId}' and Template ID '${templateId}' (Private key configured: ${!!privateKey})`);
 
-      const emailJsPayload = {
+      const emailJsPayload: any = {
         service_id: serviceId,
         template_id: templateId,
         user_id: publicKey,
         template_params: {
           name: name,
           course_title: courseTitle,
+          course: courseTitle, // supports both {{course}} and {{course_title}}
           email: email,
           phone: phone || "Не указан"
         }
       };
+
+      if (privateKey) {
+        emailJsPayload.accessToken = privateKey;
+      }
 
       const emailResponse = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
         method: "POST",
@@ -50,11 +56,20 @@ async function startServer() {
       } else {
         const errorText = await emailResponse.text();
         console.error("PsycheAcademy: EmailJS API error response:", errorText);
-        res.status(500).json({ 
-          error: "EmailJS API request failed", 
-          details: errorText,
-          tip: "Please confirm that your Service ID, Template ID, and Public Key are absolutely correct and that your template variables match."
-        });
+
+        if (errorText.includes("non-browser environments") || emailResponse.status === 403) {
+          res.status(403).json({
+            error: "EmailJS API access blocked",
+            details: errorText,
+            tip: "Для отправки писем с сервера вам нужно сделать ОДНО из двух:\n\n1. Перейти в панель EmailJS (Account > Security) по ссылке https://dashboard.emailjs.com/admin/account/security и ВКЛЮЧИТЬ опцию 'Allow API access from non-browser environments'.\n\n2. Либо скопировать там же 'Private Key' и добавить его в Секреты (Environment variables) вашего проекта как EMAILJS_PRIVATE_KEY."
+          });
+        } else {
+          res.status(emailResponse.status).json({ 
+            error: "EmailJS API request failed", 
+            details: errorText,
+            tip: "Убедитесь, что Service ID, Template ID и Public Key указаны верно и соответствуют вашему аккаунту EmailJS."
+          });
+        }
       }
     } catch (error: any) {
       console.error("PsycheAcademy Error calling EmailJS:", error.message);

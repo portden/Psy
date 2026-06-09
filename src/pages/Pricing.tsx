@@ -110,7 +110,7 @@ export default function Pricing() {
           name,
           email,
           phone,
-          courseTitle: `Plan: ${selectedPlan.name}`
+          courseTitle: `Subscription: ${selectedPlan.name}`
         }),
       });
       
@@ -118,8 +118,10 @@ export default function Pricing() {
         showToast("Заявка успешно отправлена!");
         setSelectedPlan(null);
       } else {
-        showToast("Заявка сохранена, но возникла проблема с почтой.");
-        setSelectedPlan(null);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.details || response.statusText;
+        console.error("Backend Error response:", errorData);
+        showToast(`Ошибка отправки: ${errorMessage}`);
       }
     } catch (error: any) {
       console.error("Submission error:", error);
